@@ -31,6 +31,7 @@ import type { Exploration, Model, Settings, Token } from "./types";
 import { makeDemo } from "./demo";
 import { pct, visible } from "./format";
 import { useTokenHoverPreview } from "./TokenHoverPreview";
+import LayerExplorer from "./LayerExplorer";
 
 const defaults: Settings = {
   provider: "ollama",
@@ -270,6 +271,18 @@ function ProbabilityChart({
 }
 
 export default function App() {
+  const [view, setView] = useState<"tokens" | "layers">(() =>
+    new URLSearchParams(window.location.search).get("view") === "layers"
+      ? "layers"
+      : "tokens",
+  );
+  function changeView(value: "tokens" | "layers") {
+    setView(value);
+    const url = new URL(window.location.href);
+    if (value === "layers") url.searchParams.set("view", "layers");
+    else url.searchParams.delete("view");
+    window.history.replaceState(null, "", url);
+  }
   const [settings, setSettings] = useState<Settings>(() => ({
     ...defaults,
     ...stored("tokenscope.settings", {}),
@@ -437,6 +450,7 @@ export default function App() {
   }
   function showDemo() {
     if (running) return;
+    changeView("tokens");
     setResult(makeDemo());
     setPrompt("Why is the sky blue? Explain it simply.");
     select(33);
@@ -482,6 +496,7 @@ export default function App() {
           className="new-button"
           disabled={running}
           onClick={() => {
+            changeView("tokens");
             setResult(null);
             setPrompt("");
             setError("");
@@ -492,10 +507,21 @@ export default function App() {
         </button>
         <div className="nav-label">WORKSPACE</div>
         <button
-          className="nav-item active"
-          onClick={() => promptRef.current?.focus()}
+          className={`nav-item primary-nav ${view === "tokens" ? "active" : ""}`}
+          onClick={() => {
+            changeView("tokens");
+            promptRef.current?.focus();
+          }}
         >
-          <Layers3 size={18} /> Token explorer <span className="nav-dot" />
+          <Layers3 size={18} /> Token explorer{" "}
+          {view === "tokens" && <span className="nav-dot" />}
+        </button>
+        <button
+          className={`nav-item primary-nav ${view === "layers" ? "active" : ""}`}
+          onClick={() => changeView("layers")}
+        >
+          <Activity size={18} /> Layer explorer{" "}
+          {view === "layers" && <span className="nav-dot" />}
         </button>
         <button className="nav-item" onClick={showDemo} disabled={running}>
           <FlaskConical size={18} /> Example playground
@@ -512,6 +538,7 @@ export default function App() {
                 className={`history-item ${result?.id === item.id ? "current" : ""}`}
                 disabled={running}
                 onClick={() => {
+                  changeView("tokens");
                   setResult(item);
                   setPrompt(item.prompt);
                   select(0);
@@ -567,7 +594,9 @@ export default function App() {
             <Layers3 size={16} />
             <span>Workspace</span>
             <ChevronRight size={13} />
-            <strong>Token explorer</strong>
+            <strong>
+              {view === "layers" ? "Layer explorer" : "Token explorer"}
+            </strong>
           </div>
           <button
             className={`connection-badge ${connectionState}`}
@@ -583,573 +612,590 @@ export default function App() {
           </button>
         </header>
         <div className="workspace">
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">
-                <span /> A LITTLE CLOSER TO THE MODEL
-              </div>
-              <h1>
-                Inside the next token<span>.</span>
-              </h1>
-              <p>See what your model chose. Discover what it almost said.</p>
-            </div>
-            <button
-              className="secondary-button help-button"
-              onClick={() => setModal("help")}
-            >
-              <CircleHelp size={16} /> How it works <ArrowUpRight size={14} />
-            </button>
+          <div hidden={view !== "layers"}>
+            <LayerExplorer defaultModel={model} />
           </div>
-
-          <form className="prompt-card" onSubmit={generate}>
-            <div className="section-heading">
+          <div hidden={view !== "tokens"}>
+            <div className="page-heading">
               <div>
-                <span className="step-label">01</span>
-                <h2>Start with a question</h2>
+                <div className="eyebrow">
+                  <span /> A LITTLE CLOSER TO THE MODEL
+                </div>
+                <h1>
+                  Inside the next token<span>.</span>
+                </h1>
+                <p>See what your model chose. Discover what it almost said.</p>
               </div>
-              <span className="subtle-label">
-                A prompt opens up possibilities
-              </span>
-            </div>
-            <textarea
-              ref={promptRef}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Ask your local model anything…"
-              aria-label="Your prompt"
-              maxLength={32000}
-              disabled={running}
-              onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                  e.preventDefault();
-                  generate();
-                }
-              }}
-            />
-            <div className="prompt-examples">
-              <span>Try a little curiosity</span>
-              {samples.map((s, i) => (
-                <button
-                  type="button"
-                  key={s}
-                  disabled={running}
-                  onClick={() => {
-                    setPrompt(s);
-                    promptRef.current?.focus();
-                  }}
-                >
-                  {i === 0 ? "☀" : i === 1 ? "✧" : "⌘"}{" "}
-                  {i === 0
-                    ? "The blue sky"
-                    : i === 1
-                      ? "A little mystery"
-                      : "Quantum, simply"}
-                </button>
-              ))}
-            </div>
-            <div className="prompt-controls">
-              <div className="model-control">
-                <span className="model-icon">
-                  <Layers3 size={16} />
-                </span>
-                <select
-                  aria-label="Local model"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  disabled={running || !models.length}
-                >
-                  <option value="" disabled>
-                    {connectionState === "loading"
-                      ? "Finding models…"
-                      : !models.length
-                        ? "No model connected"
-                        : "Select model"}
-                  </option>
-                  {models.map((m) => (
-                    <option key={m.name} value={m.name}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={13} />
-                {model && models.find((m) => m.name === model)?.size && (
-                  <span className="model-size">
-                    {models.find((m) => m.name === model)?.size}
-                  </span>
-                )}
-              </div>
-              <div className="generation-controls">
-                <label
-                  className="temperature-control"
-                  title="Higher temperature makes token selection more varied."
-                >
-                  <span>Temperature</span>
-                  <input
-                    aria-label="Temperature"
-                    type="range"
-                    min="0"
-                    max="2"
-                    step=".1"
-                    value={settings.temperature}
-                    disabled={running}
-                    onChange={(e) =>
-                      setSettings({ ...settings, temperature: +e.target.value })
-                    }
-                  />
-                  <output>{settings.temperature.toFixed(1)}</output>
-                </label>
-                {running ? (
-                  <button
-                    key="stop"
-                    className="primary-button stop-button"
-                    type="button"
-                    onClick={stopGeneration}
-                  >
-                    <Square size={13} /> Stop <span>{elapsed.toFixed(1)}s</span>
-                  </button>
-                ) : (
-                  <button
-                    key="generate"
-                    type="submit"
-                    className="primary-button"
-                    disabled={
-                      !prompt.trim() || !model || connectionState !== "online"
-                    }
-                  >
-                    <Sparkles size={15} /> Generate <ArrowRight size={16} />
-                  </button>
-                )}
-              </div>
-            </div>
-          </form>
-          {connectionState === "offline" && (
-            <div className="connection-notice">
-              <Terminal size={16} />
-              <span>
-                Start Ollama with <code>ollama serve</code>, then connect to
-                explore your models.
-              </span>
-              <button onClick={() => connect(settings)}>
-                <RefreshCw size={13} /> Reconnect
+              <button
+                className="secondary-button help-button"
+                onClick={() => setModal("help")}
+              >
+                <CircleHelp size={16} /> How it works <ArrowUpRight size={14} />
               </button>
             </div>
-          )}
-          {connectionState === "online" && !models.length && (
-            <div className="notice warning">
-              No text models found. Download one with{" "}
-              <code>ollama pull gemma4:e4B</code>, then reconnect in settings.
-            </div>
-          )}
-          {error && (
-            <div className="notice error" role="alert">
-              <CircleHelp size={16} />
-              <span>{error}</span>
-              <button aria-label="Dismiss error" onClick={() => setError("")}>
-                <X size={15} />
-              </button>
-            </div>
-          )}
-          {running && (
-            <div className="notice generating" role="status">
-              <LoaderCircle className="spin" size={17} />
-              <span>
-                Looking inside <strong>{model}</strong>… The first run may take
-                a moment to load the model.
-              </span>
-              <span>{elapsed.toFixed(1)}s</span>
-            </div>
-          )}
 
-          {result ? (
-            <>
-              <div className="exploration-heading">
+            <form className="prompt-card" onSubmit={generate}>
+              <div className="section-heading">
                 <div>
-                  <span className="step-label">02</span>
-                  <h2>Follow the possibilities</h2>
-                  <span className={`source-badge ${result.demo ? "demo" : ""}`}>
-                    <span />
-                    {result.demo ? "Illustrative demo" : "Local generation"}
-                  </span>
+                  <span className="step-label">01</span>
+                  <h2>Start with a question</h2>
                 </div>
-                <button className="text-button" onClick={exportResult}>
-                  <Download size={14} /> Export exploration
+                <span className="subtle-label">
+                  A prompt opens up possibilities
+                </span>
+              </div>
+              <textarea
+                ref={promptRef}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Ask your local model anything…"
+                aria-label="Your prompt"
+                maxLength={32000}
+                disabled={running}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                    e.preventDefault();
+                    generate();
+                  }
+                }}
+              />
+              <div className="prompt-examples">
+                <span>Try a little curiosity</span>
+                {samples.map((s, i) => (
+                  <button
+                    type="button"
+                    key={s}
+                    disabled={running}
+                    onClick={() => {
+                      setPrompt(s);
+                      promptRef.current?.focus();
+                    }}
+                  >
+                    {i === 0 ? "☀" : i === 1 ? "✧" : "⌘"}{" "}
+                    {i === 0
+                      ? "The blue sky"
+                      : i === 1
+                        ? "A little mystery"
+                        : "Quantum, simply"}
+                  </button>
+                ))}
+              </div>
+              <div className="prompt-controls">
+                <div className="model-control">
+                  <span className="model-icon">
+                    <Layers3 size={16} />
+                  </span>
+                  <select
+                    aria-label="Local model"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    disabled={running || !models.length}
+                  >
+                    <option value="" disabled>
+                      {connectionState === "loading"
+                        ? "Finding models…"
+                        : !models.length
+                          ? "No model connected"
+                          : "Select model"}
+                    </option>
+                    {models.map((m) => (
+                      <option key={m.name} value={m.name}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={13} />
+                  {model && models.find((m) => m.name === model)?.size && (
+                    <span className="model-size">
+                      {models.find((m) => m.name === model)?.size}
+                    </span>
+                  )}
+                </div>
+                <div className="generation-controls">
+                  <label
+                    className="temperature-control"
+                    title="Higher temperature makes token selection more varied."
+                  >
+                    <span>Temperature</span>
+                    <input
+                      aria-label="Temperature"
+                      type="range"
+                      min="0"
+                      max="2"
+                      step=".1"
+                      value={settings.temperature}
+                      disabled={running}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          temperature: +e.target.value,
+                        })
+                      }
+                    />
+                    <output>{settings.temperature.toFixed(1)}</output>
+                  </label>
+                  {running ? (
+                    <button
+                      key="stop"
+                      className="primary-button stop-button"
+                      type="button"
+                      onClick={stopGeneration}
+                    >
+                      <Square size={13} /> Stop{" "}
+                      <span>{elapsed.toFixed(1)}s</span>
+                    </button>
+                  ) : (
+                    <button
+                      key="generate"
+                      type="submit"
+                      className="primary-button"
+                      disabled={
+                        !prompt.trim() || !model || connectionState !== "online"
+                      }
+                    >
+                      <Sparkles size={15} /> Generate <ArrowRight size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </form>
+            {connectionState === "offline" && (
+              <div className="connection-notice">
+                <Terminal size={16} />
+                <span>
+                  Start Ollama with <code>ollama serve</code>, then connect to
+                  explore your models.
+                </span>
+                <button onClick={() => connect(settings)}>
+                  <RefreshCw size={13} /> Reconnect
                 </button>
               </div>
-              {result.warning && (
-                <div className="notice warning" role="status">
-                  <CircleHelp size={17} />
-                  <span>{result.warning}</span>
+            )}
+            {connectionState === "online" && !models.length && (
+              <div className="notice warning">
+                No text models found. Download one with{" "}
+                <code>ollama pull gemma4:e4B</code>, then reconnect in settings.
+              </div>
+            )}
+            {error && (
+              <div className="notice error" role="alert">
+                <CircleHelp size={16} />
+                <span>{error}</span>
+                <button aria-label="Dismiss error" onClick={() => setError("")}>
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+            {running && (
+              <div className="notice generating" role="status">
+                <LoaderCircle className="spin" size={17} />
+                <span>
+                  Looking inside <strong>{model}</strong>… The first run may
+                  take a moment to load the model.
+                </span>
+                <span>{elapsed.toFixed(1)}s</span>
+              </div>
+            )}
+
+            {result ? (
+              <>
+                <div className="exploration-heading">
+                  <div>
+                    <span className="step-label">02</span>
+                    <h2>Follow the possibilities</h2>
+                    <span
+                      className={`source-badge ${result.demo ? "demo" : ""}`}
+                    >
+                      <span />
+                      {result.demo ? "Illustrative demo" : "Local generation"}
+                    </span>
+                  </div>
+                  <button className="text-button" onClick={exportResult}>
+                    <Download size={14} /> Export exploration
+                  </button>
                 </div>
-              )}
-              {["length", "limit"].includes(result.finishReason || "") && (
-                <div className="notice warning" role="status">
-                  <CircleHelp size={17} />
-                  <span>
-                    The response reached the output token limit. Increase
-                    “Maximum output tokens” in settings for a longer response.
-                  </span>
-                </div>
-              )}
-              <div className="exploration-grid">
-                <div className="response-column">
-                  <section className="response-card">
-                    <div className="response-toolbar">
-                      <div className="response-label">
-                        <span className="response-icon">
-                          <Sparkles size={15} />
-                        </span>
-                        <strong>Model response</strong>
-                      </div>
-                      <div className="response-actions">
-                        <div
-                          className="segmented"
-                          aria-label="Response display"
-                        >
-                          <button
-                            className={mode === "text" ? "active" : ""}
-                            onClick={() => setMode("text")}
+                {result.warning && (
+                  <div className="notice warning" role="status">
+                    <CircleHelp size={17} />
+                    <span>{result.warning}</span>
+                  </div>
+                )}
+                {["length", "limit"].includes(result.finishReason || "") && (
+                  <div className="notice warning" role="status">
+                    <CircleHelp size={17} />
+                    <span>
+                      The response reached the output token limit. Increase
+                      “Maximum output tokens” in settings for a longer response.
+                    </span>
+                  </div>
+                )}
+                <div className="exploration-grid">
+                  <div className="response-column">
+                    <section className="response-card">
+                      <div className="response-toolbar">
+                        <div className="response-label">
+                          <span className="response-icon">
+                            <Sparkles size={15} />
+                          </span>
+                          <strong>Model response</strong>
+                        </div>
+                        <div className="response-actions">
+                          <div
+                            className="segmented"
+                            aria-label="Response display"
                           >
-                            Text
-                          </button>
+                            <button
+                              className={mode === "text" ? "active" : ""}
+                              onClick={() => setMode("text")}
+                            >
+                              Text
+                            </button>
+                            <button
+                              className={mode === "tokens" ? "active" : ""}
+                              onClick={() => setMode("tokens")}
+                            >
+                              Tokens
+                            </button>
+                          </div>
                           <button
-                            className={mode === "tokens" ? "active" : ""}
-                            onClick={() => setMode("tokens")}
+                            className="icon-button copy-button"
+                            aria-label="Copy response"
+                            onClick={copy}
                           >
-                            Tokens
+                            {copied ? <Check size={15} /> : <Copy size={15} />}
                           </button>
                         </div>
+                      </div>
+                      <div className="response-body">
+                        <div className="response-source">
+                          <span className="mini-dot" />
+                          {result.demo ? "EXAMPLE RESPONSE" : result.model}
+                          <span>·</span>
+                          {result.demo
+                            ? "Synthetic probabilities"
+                            : new Date(result.createdAt).toLocaleTimeString(
+                                [],
+                                {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}
+                        </div>
+                        <TokenText
+                          result={result}
+                          selected={selected}
+                          setSelected={(index) => select(index, true)}
+                          mode={mode}
+                          heatmap={heatmap}
+                        />
+                      </div>
+                      <div className="response-footer">
+                        <span>
+                          <span className="pointer-symbol">↖</span> Hover to
+                          preview · click to inspect
+                        </span>
                         <button
-                          className="icon-button copy-button"
-                          aria-label="Copy response"
-                          onClick={copy}
+                          className="heatmap-toggle"
+                          aria-pressed={heatmap}
+                          onClick={() => setHeatmap(!heatmap)}
                         >
-                          {copied ? <Check size={15} /> : <Copy size={15} />}
+                          <span className={`switch ${heatmap ? "on" : ""}`} />
+                          <span>Probability colors</span>
                         </button>
                       </div>
-                    </div>
-                    <div className="response-body">
-                      <div className="response-source">
-                        <span className="mini-dot" />
-                        {result.demo ? "EXAMPLE RESPONSE" : result.model}
-                        <span>·</span>
-                        {result.demo
-                          ? "Synthetic probabilities"
-                          : new Date(result.createdAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                      </div>
-                      <TokenText
-                        result={result}
-                        selected={selected}
-                        setSelected={(index) => select(index, true)}
-                        mode={mode}
-                        heatmap={heatmap}
-                      />
-                    </div>
-                    <div className="response-footer">
-                      <span>
-                        <span className="pointer-symbol">↖</span> Hover to
-                        preview · click to inspect
-                      </span>
-                      <button
-                        className="heatmap-toggle"
-                        aria-pressed={heatmap}
-                        onClick={() => setHeatmap(!heatmap)}
-                      >
-                        <span className={`switch ${heatmap ? "on" : ""}`} />
-                        <span>Probability colors</span>
-                      </button>
-                    </div>
-                    <div className="color-legend">
-                      <span>Less likely</span>
-                      <div className="legend-gradient" />
-                      <span>More likely</span>
-                      <span className="legend-spacer" />
-                      <span className="legend-note">
-                        Probability of the chosen token
-                      </span>
-                    </div>
-                  </section>
-                  <div className="metrics">
-                    <div>
-                      <span>
-                        <Layers3 size={13} /> Generated tokens
-                      </span>
-                      <strong>
-                        {result.tokens.length || "—"}
-                        <small>tokens</small>
-                      </strong>
-                    </div>
-                    <div>
-                      <span>
-                        <Activity size={13} /> Mean probability
-                      </span>
-                      <strong>
-                        {pct(avg)}
-                        <small>chosen tokens</small>
-                      </strong>
-                    </div>
-                    <div>
-                      <span>
-                        <Zap size={13} /> Generation speed
-                      </span>
-                      <strong>
-                        {result.tokensPerSecond?.toFixed(1) || "—"}
-                        <small>tokens / sec</small>
-                      </strong>
-                    </div>
-                  </div>
-                  {probabilities.length > 0 && (
-                    <section className="chart-card">
-                      <div className="chart-heading">
-                        <div>
-                          <Activity size={15} />
-                          <h3>The probability trail</h3>
-                        </div>
-                        <span>ONE STEP AT A TIME</span>
-                      </div>
-                      <ProbabilityChart
-                        tokens={result.tokens}
-                        selected={selected}
-                        onSelect={(index) => select(index, true)}
-                      />
-                      <div className="chart-footer">
-                        <span>Token 1</span>
-                        <span className="chart-key">
-                          <span /> Chosen token probability
+                      <div className="color-legend">
+                        <span>Less likely</span>
+                        <div className="legend-gradient" />
+                        <span>More likely</span>
+                        <span className="legend-spacer" />
+                        <span className="legend-note">
+                          Probability of the chosen token
                         </span>
-                        <span>Token {result.tokens.length}</span>
                       </div>
                     </section>
-                  )}
-                  <div className="learning-note">
-                    <span className="learning-icon">
-                      <Layers3 size={18} />
-                    </span>
-                    <div>
-                      <strong>A word can hold more than one token.</strong>
-                      <p>
-                        Models choose tokens: words, word pieces, and
-                        punctuation. Switch to Tokens to see the exact
-                        boundaries.
-                      </p>
-                    </div>
-                    <button
-                      aria-label="Learn about tokens"
-                      onClick={() => setModal("help")}
-                    >
-                      <ArrowUpRight size={17} />
-                    </button>
-                  </div>
-                </div>
-
-                <aside
-                  className="inspector"
-                  ref={inspectorRef}
-                  aria-label="Token candidate inspector"
-                >
-                  <div className="inspector-heading">
-                    <div>
-                      <span className="inspector-dot" />
-                      <h2>Token inspector</h2>
-                    </div>
-                    <span className="live-label">
-                      {result.demo ? "DEMO" : "RECORDED"}
-                    </span>
-                  </div>
-                  {token ? (
-                    <>
-                      <div className="chosen-token">
-                        <div className="token-position">
-                          <span>
-                            TOKEN {String(selected + 1).padStart(2, "0")}{" "}
-                            <span className="of">/ {result.tokens.length}</span>
-                          </span>
-                          <div className="token-nav">
-                            <button
-                              aria-label="Previous token"
-                              disabled={selected === 0}
-                              onClick={() => select(selected - 1)}
-                            >
-                              <ChevronLeft size={15} />
-                            </button>
-                            <button
-                              aria-label="Next token"
-                              disabled={selected === result.tokens.length - 1}
-                              onClick={() => select(selected + 1)}
-                            >
-                              <ChevronRight size={15} />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="chosen-token-main">
-                          <code>{visible(token.text)}</code>
-                          <span className="selected-badge">
-                            <Check size={10} /> Selected
-                          </span>
-                        </div>
-                        <div className="selected-probability">
-                          <strong>{pct(token.probability)}</strong>
-                          <span>reported probability</span>
-                        </div>
-                      </div>
-                      <div className="candidate-toolbar">
-                        <h3>What else was possible?</h3>
-                        <select
-                          aria-label="Number of candidates to display"
-                          value={candidateCount}
-                          onChange={(e) => setCandidateCount(+e.target.value)}
-                        >
-                          {[5, 10, 20, 100].map((n) => (
-                            <option key={n} value={n}>
-                              Top {n}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="candidate-search">
-                        <Search size={14} />
-                        <input
-                          aria-label="Search candidates"
-                          placeholder="Find a candidate…"
-                          value={search}
-                          onChange={(e) => setSearch(e.target.value)}
-                        />
-                        {search && (
-                          <button
-                            aria-label="Clear candidate search"
-                            onClick={() => setSearch("")}
-                          >
-                            <X size={12} />
-                          </button>
-                        )}
-                      </div>
-                      <div className="candidate-columns">
-                        <span>RANK / TOKEN</span>
-                        <span>PROBABILITY</span>
-                      </div>
-                      <div className="candidate-list">
-                        {candidates.length ? (
-                          candidates
-                            .slice(0, candidateCount)
-                            .map((candidate, i) => (
-                              <div
-                                className={`candidate-row ${candidate.selected ? "chosen" : ""}`}
-                                key={`${candidate.id ?? candidate.text}-${i}`}
-                                title={`Log probability: ${candidate.logprob?.toFixed(6) ?? "Unavailable"}`}
-                              >
-                                <span
-                                  className="candidate-fill"
-                                  style={{
-                                    width: `${Math.min(100, candidate.probability * 100)}%`,
-                                  }}
-                                />
-                                <span className="rank">
-                                  {String(candidate.rank).padStart(2, "0")}
-                                </span>
-                                <code>{visible(candidate.text)}</code>
-                                {candidate.selected && <Check size={12} />}
-                                <span className="candidate-pct">
-                                  {pct(candidate.probability)}
-                                </span>
-                              </div>
-                            ))
-                        ) : (
-                          <div className="candidate-empty">
-                            {search
-                              ? "No candidates match your search."
-                              : "This server did not provide candidate probabilities."}
-                          </div>
-                        )}
-                      </div>
-                      <div className="candidate-summary">
+                    <div className="metrics">
+                      <div>
                         <span>
-                          Showing {Math.min(candidateCount, candidates.length)}{" "}
-                          of {token.candidates.length} returned
+                          <Layers3 size={13} /> Generated tokens
                         </span>
-                        <span>· = space</span>
+                        <strong>
+                          {result.tokens.length || "—"}
+                          <small>tokens</small>
+                        </strong>
                       </div>
-                      {token.candidates.length > 0 && (
-                        <div className="coverage-box">
-                          <div>
-                            <span>Returned probability mass</span>
-                            <strong>{pct(Math.min(1, coverage))}</strong>
-                          </div>
-                          <div className="coverage-track">
-                            <span
-                              style={{
-                                width: `${Math.min(100, coverage * 100)}%`,
-                              }}
-                            />
-                          </div>
-                          <p>
-                            {pct(Math.max(0, 1 - coverage))} remains outside the
-                            returned candidates.
-                          </p>
-                        </div>
-                      )}
-                      {candidateCount > token.candidates.length && (
-                        <div className="limit-note">
-                          {result.provider === "ollama"
-                            ? "Ollama returns up to 20 candidates per token. Connect llama.cpp in settings to request up to 100."
-                            : "The server may return fewer candidates than requested."}
-                        </div>
-                      )}
-                      <div className="context-box">
-                        <span className="context-label">
-                          THE CONTEXT BEFORE THIS TOKEN
+                      <div>
+                        <span>
+                          <Activity size={13} /> Mean probability
                         </span>
+                        <strong>
+                          {pct(avg)}
+                          <small>chosen tokens</small>
+                        </strong>
+                      </div>
+                      <div>
+                        <span>
+                          <Zap size={13} /> Generation speed
+                        </span>
+                        <strong>
+                          {result.tokensPerSecond?.toFixed(1) || "—"}
+                          <small>tokens / sec</small>
+                        </strong>
+                      </div>
+                    </div>
+                    {probabilities.length > 0 && (
+                      <section className="chart-card">
+                        <div className="chart-heading">
+                          <div>
+                            <Activity size={15} />
+                            <h3>The probability trail</h3>
+                          </div>
+                          <span>ONE STEP AT A TIME</span>
+                        </div>
+                        <ProbabilityChart
+                          tokens={result.tokens}
+                          selected={selected}
+                          onSelect={(index) => select(index, true)}
+                        />
+                        <div className="chart-footer">
+                          <span>Token 1</span>
+                          <span className="chart-key">
+                            <span /> Chosen token probability
+                          </span>
+                          <span>Token {result.tokens.length}</span>
+                        </div>
+                      </section>
+                    )}
+                    <div className="learning-note">
+                      <span className="learning-icon">
+                        <Layers3 size={18} />
+                      </span>
+                      <div>
+                        <strong>A word can hold more than one token.</strong>
                         <p>
-                          {result.tokens
-                            .slice(Math.max(0, selected - 10), selected)
-                            .map((t) => t.text)
-                            .join("") || "Beginning of the response"}
-                          <span className="context-cursor" />
+                          Models choose tokens: words, word pieces, and
+                          punctuation. Switch to Tokens to see the exact
+                          boundaries.
                         </p>
                       </div>
-                    </>
-                  ) : (
-                    <div className="inspector-empty">
-                      <Search size={26} />
-                      <h3>Meet the possibilities.</h3>
-                      <p>
-                        Candidate probabilities will appear here when your model
-                        returns them.
-                      </p>
+                      <button
+                        aria-label="Learn about tokens"
+                        onClick={() => setModal("help")}
+                      >
+                        <ArrowUpRight size={17} />
+                      </button>
                     </div>
-                  )}
-                </aside>
-              </div>
-              {result.demo && (
-                <div className="demo-disclaimer">
-                  <FlaskConical size={13} />
-                  <span>
-                    You’re exploring an illustrative example. Generate with your
-                    local model to see real probabilities.
-                  </span>
-                  <button onClick={() => promptRef.current?.focus()}>
-                    Make it yours <ArrowRight size={13} />
-                  </button>
+                  </div>
+
+                  <aside
+                    className="inspector"
+                    ref={inspectorRef}
+                    aria-label="Token candidate inspector"
+                  >
+                    <div className="inspector-heading">
+                      <div>
+                        <span className="inspector-dot" />
+                        <h2>Token inspector</h2>
+                      </div>
+                      <span className="live-label">
+                        {result.demo ? "DEMO" : "RECORDED"}
+                      </span>
+                    </div>
+                    {token ? (
+                      <>
+                        <div className="chosen-token">
+                          <div className="token-position">
+                            <span>
+                              TOKEN {String(selected + 1).padStart(2, "0")}{" "}
+                              <span className="of">
+                                / {result.tokens.length}
+                              </span>
+                            </span>
+                            <div className="token-nav">
+                              <button
+                                aria-label="Previous token"
+                                disabled={selected === 0}
+                                onClick={() => select(selected - 1)}
+                              >
+                                <ChevronLeft size={15} />
+                              </button>
+                              <button
+                                aria-label="Next token"
+                                disabled={selected === result.tokens.length - 1}
+                                onClick={() => select(selected + 1)}
+                              >
+                                <ChevronRight size={15} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="chosen-token-main">
+                            <code>{visible(token.text)}</code>
+                            <span className="selected-badge">
+                              <Check size={10} /> Selected
+                            </span>
+                          </div>
+                          <div className="selected-probability">
+                            <strong>{pct(token.probability)}</strong>
+                            <span>reported probability</span>
+                          </div>
+                        </div>
+                        <div className="candidate-toolbar">
+                          <h3>What else was possible?</h3>
+                          <select
+                            aria-label="Number of candidates to display"
+                            value={candidateCount}
+                            onChange={(e) => setCandidateCount(+e.target.value)}
+                          >
+                            {[5, 10, 20, 100].map((n) => (
+                              <option key={n} value={n}>
+                                Top {n}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="candidate-search">
+                          <Search size={14} />
+                          <input
+                            aria-label="Search candidates"
+                            placeholder="Find a candidate…"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                          />
+                          {search && (
+                            <button
+                              aria-label="Clear candidate search"
+                              onClick={() => setSearch("")}
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                        <div className="candidate-columns">
+                          <span>RANK / TOKEN</span>
+                          <span>PROBABILITY</span>
+                        </div>
+                        <div className="candidate-list">
+                          {candidates.length ? (
+                            candidates
+                              .slice(0, candidateCount)
+                              .map((candidate, i) => (
+                                <div
+                                  className={`candidate-row ${candidate.selected ? "chosen" : ""}`}
+                                  key={`${candidate.id ?? candidate.text}-${i}`}
+                                  title={`Log probability: ${candidate.logprob?.toFixed(6) ?? "Unavailable"}`}
+                                >
+                                  <span
+                                    className="candidate-fill"
+                                    style={{
+                                      width: `${Math.min(100, candidate.probability * 100)}%`,
+                                    }}
+                                  />
+                                  <span className="rank">
+                                    {String(candidate.rank).padStart(2, "0")}
+                                  </span>
+                                  <code>{visible(candidate.text)}</code>
+                                  {candidate.selected && <Check size={12} />}
+                                  <span className="candidate-pct">
+                                    {pct(candidate.probability)}
+                                  </span>
+                                </div>
+                              ))
+                          ) : (
+                            <div className="candidate-empty">
+                              {search
+                                ? "No candidates match your search."
+                                : "This server did not provide candidate probabilities."}
+                            </div>
+                          )}
+                        </div>
+                        <div className="candidate-summary">
+                          <span>
+                            Showing{" "}
+                            {Math.min(candidateCount, candidates.length)} of{" "}
+                            {token.candidates.length} returned
+                          </span>
+                          <span>· = space</span>
+                        </div>
+                        {token.candidates.length > 0 && (
+                          <div className="coverage-box">
+                            <div>
+                              <span>Returned probability mass</span>
+                              <strong>{pct(Math.min(1, coverage))}</strong>
+                            </div>
+                            <div className="coverage-track">
+                              <span
+                                style={{
+                                  width: `${Math.min(100, coverage * 100)}%`,
+                                }}
+                              />
+                            </div>
+                            <p>
+                              {pct(Math.max(0, 1 - coverage))} remains outside
+                              the returned candidates.
+                            </p>
+                          </div>
+                        )}
+                        {candidateCount > token.candidates.length && (
+                          <div className="limit-note">
+                            {result.provider === "ollama"
+                              ? "Ollama returns up to 20 candidates per token. Connect llama.cpp in settings to request up to 100."
+                              : "The server may return fewer candidates than requested."}
+                          </div>
+                        )}
+                        <div className="context-box">
+                          <span className="context-label">
+                            THE CONTEXT BEFORE THIS TOKEN
+                          </span>
+                          <p>
+                            {result.tokens
+                              .slice(Math.max(0, selected - 10), selected)
+                              .map((t) => t.text)
+                              .join("") || "Beginning of the response"}
+                            <span className="context-cursor" />
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="inspector-empty">
+                        <Search size={26} />
+                        <h3>Meet the possibilities.</h3>
+                        <p>
+                          Candidate probabilities will appear here when your
+                          model returns them.
+                        </p>
+                      </div>
+                    )}
+                  </aside>
                 </div>
-              )}
-            </>
-          ) : (
-            <div className="empty-state">
-              <span>
-                <Workflow size={36} />
-              </span>
-              <h2>A whole world of next words.</h2>
-              <p>
-                Ask a question above. Then explore every token
-                <br />
-                and the possibilities behind it.
-              </p>
-              <button className="secondary-button" onClick={showDemo}>
-                <FlaskConical size={15} /> Explore an example
-              </button>
-            </div>
-          )}
+                {result.demo && (
+                  <div className="demo-disclaimer">
+                    <FlaskConical size={13} />
+                    <span>
+                      You’re exploring an illustrative example. Generate with
+                      your local model to see real probabilities.
+                    </span>
+                    <button onClick={() => promptRef.current?.focus()}>
+                      Make it yours <ArrowRight size={13} />
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="empty-state">
+                <span>
+                  <Workflow size={36} />
+                </span>
+                <h2>A whole world of next words.</h2>
+                <p>
+                  Ask a question above. Then explore every token
+                  <br />
+                  and the possibilities behind it.
+                </p>
+                <button className="secondary-button" onClick={showDemo}>
+                  <FlaskConical size={15} /> Explore an example
+                </button>
+              </div>
+            )}
+          </div>
           <footer className="workspace-footer">
             <span>
               <ShieldCheck size={12} /> Local inference. Open possibilities.

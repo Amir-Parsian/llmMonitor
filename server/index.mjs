@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ApiError, generate, listModels } from "./providers.mjs";
+import { tracingStatus, traceModel } from "./tracing.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const mime = {
@@ -34,6 +35,8 @@ export function createAppServer({
           throw new ApiError("Local access only.", 403);
         if (req.headers.origin && req.headers.origin !== url.origin)
           throw new ApiError("Cross-origin requests are not allowed.", 403);
+        if (req.method === "GET" && url.pathname === "/api/tracing/status")
+          return json(res, 200, await tracingStatus());
         if (req.method === "GET" && url.pathname === "/api/models") {
           return json(
             res,
@@ -41,7 +44,10 @@ export function createAppServer({
             await listModels(Object.fromEntries(url.searchParams)),
           );
         }
-        if (req.method === "POST" && url.pathname === "/api/generate") {
+        if (
+          req.method === "POST" &&
+          ["/api/generate", "/api/tracing/run"].includes(url.pathname)
+        ) {
           if (!req.headers["content-type"]?.startsWith("application/json"))
             throw new ApiError("Send JSON.", 415);
           const chunks = [];
@@ -64,6 +70,30 @@ export function createAppServer({
           res.once("close", () => {
             if (!res.writableEnded) controller.abort();
           });
+          if (url.pathname === "/api/tracing/run") {
+            const event = (value) => {
+              if (!res.destroyed) {
+                if (!res.headersSent)
+                  res.writeHead(200, {
+                    "Content-Type": "application/x-ndjson",
+                    "Cache-Control": "no-store",
+                    "X-Content-Type-Options": "nosniff",
+                  });
+                res.write(JSON.stringify(value) + "\n");
+              }
+            };
+            try {
+              await traceModel(input, {
+                signal: controller.signal,
+                onEvent: event,
+              });
+            } catch (error) {
+              if (!res.headersSent) throw error;
+              event({ type: "error", error: error.message });
+            }
+            if (!res.destroyed) res.end();
+            return;
+          }
           const result = await generate(input, controller.signal);
           if (!res.destroyed) json(res, 200, result);
           return;

@@ -14,7 +14,9 @@
     "dev": "node server/index.mjs --dev",
     "build": "tsc -b && vite build",
     "start": "node server/index.mjs",
-    "test": "node --test server/*.test.mjs"
+    "test": "node --test server/*.test.mjs",
+    "setup:tracer": "node scripts/setup-tracer.mjs",
+    "test:trace": "node scripts/verify-tracer.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

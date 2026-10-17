@@ -8,3 +8,4 @@ output/
 .env.*
 !.env.example
 *.log
+.runtime/
