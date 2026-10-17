@@ -1,0 +1,32 @@
+{
+  "name": "llm-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Explore candidate tokens and probabilities from local Ollama and llama.cpp models.",
+  "license": "MIT",
+  "author": "Amir Parsian",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Amir-Parsian/llmMonitor.git"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.mjs --dev",
+    "build": "tsc -b && vite build",
+    "start": "node server/index.mjs",
+    "test": "node --test server/*.test.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
